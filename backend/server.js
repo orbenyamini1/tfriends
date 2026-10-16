@@ -44,11 +44,22 @@ const authLimiter = rateLimit({
 });
 
 // הגדרת CORS
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://tfriends.vercel.app'
+];
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // מאפשר בקשות ללא origin (כמו Postman) או מהדומיינים המורשים
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Blocked by CORS'));
+    }
+  },
   credentials: true
 }));
-
 // Middlewares לפענוח גוף הבקשה
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
