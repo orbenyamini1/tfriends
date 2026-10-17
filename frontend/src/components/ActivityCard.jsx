@@ -3,9 +3,12 @@ import React from 'react';
 const ActivityCard = React.memo(({ activity, onSwipe }) => {
   if (!activity) return null;
 
-  const UPLOADS_URL = import.meta.env.VITE_API_URL 
-    ? (import.meta.env.VITE_API_URL + '/uploads/') 
-    : 'https://tfriends-backend.onrender.com/uploads/';
+  // חילוץ כתובת הבסיס של השרת ללא סיומת /api
+  const API_BASE = import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+    : 'https://tfriends-backend.onrender.com';
+
+  const UPLOADS_URL = `${API_BASE}/uploads/`;
 
   const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80';
 

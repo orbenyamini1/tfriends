@@ -14,15 +14,13 @@ const swipeRoutes = require('./routes/swipeRoutes');
 
 const app = express();
 
-// 1. אבטחה בסיסית עם Helmet (מותאם ל-Vite ללא חסימת eval וללא שגיאות CSP)
 app.use(
   helmet({
     contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" } // פותר את ה-ERR_BLOCKED_BY_RESPONSE
   })
 );
-
-// 2. שכבת Rate Limiting כללית לכל ה-API (דרישת סילבוס למניעת DoS)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -35,7 +33,6 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
-// 3. שכבת Rate Limiting מוגברת ל-Auth (מניעת Brute-Force על סיסמאות)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
@@ -49,7 +46,7 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
-// 4. CORS ופענוח JSON
+//  CORS ופענוח JSON
 app.use(cors({
   origin: true,
   credentials: true
@@ -57,21 +54,18 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 5. שירות קבצים סטטיים שהועלו דרך Multer
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// 6. נתיבי ה-API
+//  נתיבי ה-API
 app.use('/api/auth', authRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/activities', activityRoutes);
 app.use('/api/swipes', swipeRoutes);
 
-// 7. נתיב בדיקת בריאות שרת
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'tfriends backend is active' });
 });
 
-// 8. Global Error Handler מרכזי
 app.use((err, req, res, next) => {
   console.error('SERVER ERROR:', err.message);
   const statusCode = err.statusCode || 500;
@@ -82,7 +76,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 9. התחברות ל-MongoDB והרצת השרת
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/tfriends';
 
