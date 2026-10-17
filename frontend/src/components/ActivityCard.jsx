@@ -3,16 +3,17 @@ import React from 'react';
 const ActivityCard = React.memo(({ activity, onSwipe }) => {
   if (!activity) return null;
 
-  const UPLOADS_URL = 'http://localhost:5000/uploads/';
+  const UPLOADS_URL = import.meta.env.VITE_API_URL 
+    ? (import.meta.env.VITE_API_URL + '/uploads/') 
+    : 'https://tfriends-backend.onrender.com/uploads/';
+
   const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80';
 
-  // בדיקה של שני השדות (imageUrl או image)
-  const rawImage = activity.imageUrl || activity.image;
+  const rawImage = activity?.imageUrl || activity?.image;
 
-  // אם זו כתובת אינטרנט מלאה נשתמש בה, אם זה קובץ מהשרת נשרשר את תיקיית uploads
-  const imageSrc = rawImage
-    ? (rawImage.startsWith('http') ? rawImage : `${UPLOADS_URL}${rawImage}`)
-    : DEFAULT_IMAGE;
+  const imageSrc = rawImage?.startsWith('http')
+    ? rawImage
+    : (rawImage ? (UPLOADS_URL + rawImage) : DEFAULT_IMAGE);
 
   return (
     <div style={{
