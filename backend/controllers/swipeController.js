@@ -30,7 +30,7 @@ const handleSwipe = async (req, res, next) => {
     let isMatch = false;
     let matchedUsers = [];
 
-    // 2. בדיקת התאמה: אם נשלח לייק ויש קבוצה פעילה
+    // 2. בדיקת התאמה: אם נשלח לייק
     if (status === 'like') {
       let targetGroup = null;
 
@@ -51,7 +51,12 @@ const handleSwipe = async (req, res, next) => {
         // אם לפחות 2 חברים שונים בקבוצה אהבו את הפעילות - מוכרזת התאמה!
         if (groupLikes.length >= 2) {
           isMatch = true;
-          matchedUsers = groupLikes.map(gl => gl.user?.name || 'משתמש');
+          matchedUsers = groupLikes.map((gl) => gl.user?.name || 'משתמש');
+
+          // עדכון היסטוריית הקבוצה ב-DB כדי שהמאטץ' יישמר לתמיד
+          await Group.findByIdAndUpdate(targetGroup._id, {
+            $addToSet: { matches: activityId }
+          });
         }
       }
     }

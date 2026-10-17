@@ -19,7 +19,8 @@ const createGroup = async (req, res, next) => {
       code,
       image: groupImage,
       admin: adminId,
-      members: [adminId] // המנהל מתווסף אוטומטית כחבר קבוצה
+      members: [adminId], // המנהל מתווסף אוטומטית כחבר קבוצה
+      matches: []
     });
 
     await group.populate('members', 'name email profileImage');
@@ -37,7 +38,8 @@ const getUserGroups = async (req, res, next) => {
     const userId = req.user._id;
     const groups = await Group.find({ members: userId })
       .populate('members', 'name email profileImage')
-      .populate('admin', 'name email');
+      .populate('admin', 'name email')
+      .populate('matches');
 
     res.json(groups);
   } catch (error) {
@@ -65,6 +67,7 @@ const joinGroup = async (req, res, next) => {
 
     await group.populate('members', 'name email profileImage');
     await group.populate('admin', 'name email');
+    await group.populate('matches');
 
     res.json(group);
   } catch (error) {
@@ -84,7 +87,6 @@ const updateGroup = async (req, res, next) => {
       return res.status(404).json({ message: 'הקבוצה לא נמצאה' });
     }
 
-    // בדיקת הרשאת מנהל
     if (group.admin.toString() !== userId.toString()) {
       return res.status(403).json({ message: 'רק מנהל הקבוצה מורשה לעדכן את פרטיה' });
     }
@@ -94,6 +96,7 @@ const updateGroup = async (req, res, next) => {
 
     await group.save();
     await group.populate('members', 'name email profileImage');
+    await group.populate('matches');
 
     res.json(group);
   } catch (error) {
@@ -101,17 +104,17 @@ const updateGroup = async (req, res, next) => {
   }
 };
 
-// 5. MATCHES - שליפת כל ההתאמות הפעילות עבור קבוצה מסוימת (לפחות 2 חברים עשו לייק)
+// 5. MATCHES - שליפת כל ההתאמות הפעילות עבור קבוצה מסוימת (כולל אובייקט Activity מלא)
 const getGroupMatches = async (req, res, next) => {
   try {
     const { groupId } = req.params;
-    const group = await Group.findById(groupId);
+    const group = await Group.findById(groupId).populate('matches');
 
     if (!group) {
       return res.status(404).json({ success: false, message: 'קבוצה לא נמצאה' });
     }
 
-    // שליפת כל הלייקים של חברי הקבוצה
+    // שליפת כל הלייקים של חברי הקבוצה כדי להצליב
     const groupLikes = await Swipe.find({
       user: { $in: group.members },
       status: 'like'
@@ -119,7 +122,7 @@ const getGroupMatches = async (req, res, next) => {
       .populate('user', 'name')
       .populate('activity');
 
-    // קיבוץ הלייקים לפי Activity
+    // קיבוץ לפי Activity
     const activityMap = {};
     groupLikes.forEach((swipe) => {
       if (!swipe.activity) return;
@@ -133,22 +136,36 @@ const getGroupMatches = async (req, res, next) => {
       activityMap[actId].users.push(swipe.user?.name || 'משתמש');
     });
 
-    // סינון: רק פעילויות שלפחות 2 חברים שונים עשו להן לייק
-    const matches = Object.values(activityMap)
+    // כל פעילות שלפחות 2 חברים עשו לה לייק
+    const computedMatches = Object.values(activityMap)
       .filter((item) => item.users.length >= 2)
       .map((item) => ({
         id: item.activity._id,
+        activity: item.activity,
         activityTitle: item.activity.title,
+        users: item.users,
         message: `יש התאמה בקבוצה "${group.name}" על ${item.activity.title}! 🎉 (חברים: ${item.users.join(', ')})`
       }));
 
-    res.status(200).json({ success: true, matches });
+    // סנכרון עם שדה ה-matches ב-DB במידה ועוד לא נשמרו
+    const matchedActivityIds = computedMatches.map((m) => m.activity._id);
+    if (matchedActivityIds.length > 0) {
+      await Group.findByIdAndUpdate(groupId, {
+        $addToSet: { matches: {$each: matchedActivityIds } }
+      });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      matches: computedMatches,
+      savedMatches: group.matches 
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// 6. DELETE - הסרת חבר מהקבוצה (מנהל מסיר חבר / חבר עוזב מרצונו)
+// 6. DELETE - הסרת חבר מהקבוצה
 const removeMember = async (req, res, next) => {
   try {
     const { groupId, memberId } = req.params;
@@ -162,12 +179,10 @@ const removeMember = async (req, res, next) => {
     const isAdmin = group.admin.toString() === currentUserId.toString();
     const isSelfRemoval = memberId.toString() === currentUserId.toString();
 
-    // רק מנהל יכול להסיר חברים אחרים, או שמשתמש עוזב בעצמו
     if (!isAdmin && !isSelfRemoval) {
       return res.status(403).json({ message: 'אין לך הרשאה להסיר משתמש זה מהקבוצה' });
     }
 
-    // מנהל אינו יכול להסיר את עצמו כל עוד הוא Admin (אלא אם מוחקים את הקבוצה)
     if (isAdmin && isSelfRemoval) {
       return res.status(400).json({ message: 'מנהל הקבוצה אינו יכול לעזוב. ניתן למחוק את הקבוצה לחלוטין.' });
     }
@@ -182,7 +197,7 @@ const removeMember = async (req, res, next) => {
   }
 };
 
-// 7. DELETE - מחיקת קבוצה לחלוטין (הרשאת Admin בלבד)
+// 7. DELETE - מחיקת קבוצה לחלוטין
 const deleteGroup = async (req, res, next) => {
   try {
     const { groupId } = req.params;

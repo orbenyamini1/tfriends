@@ -23,6 +23,10 @@ const groupSchema = new mongoose.Schema({
   members: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  }],
+  matches: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Activity'
   }]
 }, {
   timestamps: true
