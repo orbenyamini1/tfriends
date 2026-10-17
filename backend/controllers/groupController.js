@@ -1,4 +1,5 @@
 const Group = require('../models/Group');
+const Swipe = require('../models/Swipe');
 
 // 1. CREATE - יצירת קבוצה חדשה (עם העלאת תמונה)
 const createGroup = async (req, res, next) => {
@@ -10,7 +11,6 @@ const createGroup = async (req, res, next) => {
       return res.status(400).json({ message: 'נא להזין שם לקבוצה' });
     }
 
-    // מחרוזת קוד ייחודית בת 6 תווים
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     const groupImage = req.file ? req.file.filename : 'default-group.png';
 
@@ -31,7 +31,7 @@ const createGroup = async (req, res, next) => {
   }
 };
 
-// 2. READ - שליפת כל הקבוצות של המשתמש המחובר
+// 2. READ - שליפת כל הקבוצות שבהן המשתמש חבר
 const getUserGroups = async (req, res, next) => {
   try {
     const userId = req.user._id;
@@ -45,7 +45,7 @@ const getUserGroups = async (req, res, next) => {
   }
 };
 
-// 2b. READ - הצטרפות לקבוצה באמצעות קוד
+// 3. JOIN - הצטרפות לקבוצה באמצעות קוד
 const joinGroup = async (req, res, next) => {
   try {
     const { code } = req.body;
@@ -72,7 +72,7 @@ const joinGroup = async (req, res, next) => {
   }
 };
 
-// 3. UPDATE - עדכון שם/תמונת קבוצה (הרשאת Admin בלבד)
+// 4. UPDATE - עדכון פרטי קבוצה (מנהל בלבד)
 const updateGroup = async (req, res, next) => {
   try {
     const { groupId } = req.params;
@@ -101,7 +101,54 @@ const updateGroup = async (req, res, next) => {
   }
 };
 
-// 4. DELETE - הסרת חבר מהקבוצה (מנהל מסיר חבר / חבר עוזב מרצונו)
+// 5. MATCHES - שליפת כל ההתאמות הפעילות עבור קבוצה מסוימת (לפחות 2 חברים עשו לייק)
+const getGroupMatches = async (req, res, next) => {
+  try {
+    const { groupId } = req.params;
+    const group = await Group.findById(groupId);
+
+    if (!group) {
+      return res.status(404).json({ success: false, message: 'קבוצה לא נמצאה' });
+    }
+
+    // שליפת כל הלייקים של חברי הקבוצה
+    const groupLikes = await Swipe.find({
+      user: { $in: group.members },
+      status: 'like'
+    })
+      .populate('user', 'name')
+      .populate('activity');
+
+    // קיבוץ הלייקים לפי Activity
+    const activityMap = {};
+    groupLikes.forEach((swipe) => {
+      if (!swipe.activity) return;
+      const actId = swipe.activity._id.toString();
+      if (!activityMap[actId]) {
+        activityMap[actId] = {
+          activity: swipe.activity,
+          users: []
+        };
+      }
+      activityMap[actId].users.push(swipe.user?.name || 'משתמש');
+    });
+
+    // סינון: רק פעילויות שלפחות 2 חברים שונים עשו להן לייק
+    const matches = Object.values(activityMap)
+      .filter((item) => item.users.length >= 2)
+      .map((item) => ({
+        id: item.activity._id,
+        activityTitle: item.activity.title,
+        message: `יש התאמה בקבוצה "${group.name}" על ${item.activity.title}! 🎉 (חברים: ${item.users.join(', ')})`
+      }));
+
+    res.status(200).json({ success: true, matches });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 6. DELETE - הסרת חבר מהקבוצה (מנהל מסיר חבר / חבר עוזב מרצונו)
 const removeMember = async (req, res, next) => {
   try {
     const { groupId, memberId } = req.params;
@@ -125,7 +172,7 @@ const removeMember = async (req, res, next) => {
       return res.status(400).json({ message: 'מנהל הקבוצה אינו יכול לעזוב. ניתן למחוק את הקבוצה לחלוטין.' });
     }
 
-    group.members = group.members.filter(id => id.toString() !== memberId.toString());
+    group.members = group.members.filter((id) => id.toString() !== memberId.toString());
     await group.save();
     await group.populate('members', 'name email profileImage');
 
@@ -135,7 +182,7 @@ const removeMember = async (req, res, next) => {
   }
 };
 
-// 4b. DELETE - מחיקת קבוצה לחלוטין (הרשאת Admin בלבד)
+// 7. DELETE - מחיקת קבוצה לחלוטין (הרשאת Admin בלבד)
 const deleteGroup = async (req, res, next) => {
   try {
     const { groupId } = req.params;
@@ -162,6 +209,7 @@ module.exports = {
   getUserGroups,
   joinGroup,
   updateGroup,
+  getGroupMatches,
   removeMember,
   deleteGroup
 };

@@ -1,53 +1,113 @@
 # 🎯 tfriends - Group Activity Matching Platform
 
-**tfriends** is an interactive, full-stack MERN application engineered to eliminate decision fatigue and group disagreements when deciding "What are we doing today?". 
-Inspired by swipe-matching mechanics, it enables group members to browse activity proposals, register preferences via dynamic card swiping, and trigger real-time group matches when at least two members share an interest.
+**tfriends** is a full-stack MERN platform designed to resolve group indecision when choosing activities. Group members swipe through curated leisure options, triggering automatic group matches whenever at least two members like the same activity.
 
 ---
 
-## 🌐 Live Deployments
-- **Frontend (Vercel):** [https://tfriends.vercel.app/]
+## 🌐 Live Deployments & Repository
+- **Frontend (Vercel):** https://tfriends.vercel.app
 - **Backend API (Render):** https://tfriends-backend.onrender.com
-- **Monorepo Repository:** https://github.com/orbenyamini1/tfriends
+- **GitHub Monorepo:** https://github.com/orbenyamini1/tfriends
 
 ---
 
-## 👥 Team & Responsibilities
-- **Or Benyamini** – Full Stack Developer & System Architect
-  - Designed the end-to-end RESTful architecture, MVC backend services, and cloud deployment pipelines.
-  - Implemented client-side state management combining Context API and Redux Toolkit.
-  - Enforced security protocols (JWT, bcrypt, Helmet headers, two-tiered rate limiting) and optimized React rendering pipelines.
+## 👥 Contributor & Role
+- **Or Benyamini** – Full Stack Developer
+  - Designed the end-to-end MVC architecture and integrated MongoDB Atlas collections.
+  - Implemented client state using Context API and Redux Toolkit.
+  - Hardened endpoints with JWT, bcrypt, Helmet headers, and express-rate-limit.
+  - Configured SPA routing fallbacks (`vercel.json`) and optimized React renders with `React.lazy` and `React.memo`.
 
 ---
 
-## 🛠 System Architecture & Tech Stack
+## 🛠 Tech Stack & Architecture
 
-### Backend (Node.js & Express)
-- **Architecture:** Structured Model-View-Controller (MVC) separating controllers, routes, models, config, and middleware layers.
-- **Database Layer:** Cloud-hosted MongoDB Atlas managed via Mongoose ODM schemas with strong typing, cross-collection references, and complex query operators (`$in`, `$nin`, `populate`).
-- **Security & Protection:**
-  - `bcrypt`: Password salting and hashing (pre-save workflow).
-  - `jsonwebtoken` (JWT): Stateless authentication issued on login and verified via a centralized `protect` middleware.
-  - `helmet`: Hardened HTTP response headers (configured to prevent cross-origin embedding conflicts and CSP script evaluation blocks).
-  - `express-rate-limit`: Two-tiered protection preventing Denial of Service (DoS) and brute-force authentication attacks on login/register endpoints.
-- **Validation & Media Processing:**
-  - `Joi`: Strict schema validation middleware intercepting bad payloads prior to controller execution.
-  - `Multer`: Multi-part form data processing for avatar and group image uploads, stored under static asset directories.
-  - **Global Error Handling:** Centralized 4-parameter error middleware standardizing JSON response formats.
-
-### Frontend (React SPA with Vite)
-- **Tooling:** Vite build system delivering fast compilation, native ES modules, and modern React 18+ pipelines.
-- **State Management Architecture:**
-  - **Context API (`AuthContext`):** Manages global session state, JWT persistence, local storage sync, and auto-login handshake (`/api/auth/me`).
-  - **Redux Toolkit (`store.js`, `groupSlice.js`):** Coordinates domain-level state, asynchronous fetching (`createAsyncThunk`), active group switching, local swipe history, and real-time match events.
-- **Performance & Optimization:**
-  - `React.lazy` & `Suspense`: Route-level code splitting minimizing initial bundle footprint.
-  - `React.memo`: Memoized `ActivityCard` components preventing unnecessary re-renders during rapid swiping.
-- **Routing & Fallbacks:**
-  - React Router DOM v6 with `PrivateRoute` wrappers protecting authenticated views.
-  - Dedicated Catch-All 404 Route (`path="*"`) with customized UI.
-  - `vercel.json` rewrite configuration preventing 404 routing errors on direct URL refreshes.
+- **Backend:** Node.js, Express (MVC), Mongoose, MongoDB Atlas.
+- **Frontend:** React 18, Vite, React Router DOM v6, Redux Toolkit, Context API.
+- **Security:** Helmet (CORP-enabled), express-rate-limit (API & Auth limits), JWT stateless tokens, bcrypt password hashing.
+- **Media & Validation:** Multer (multipart uploads), Joi (request schema validation).
+- **Optimization:** Route-level Code Splitting (`Suspense` + `lazy`), `React.memo` activity cards.
 
 ---
 
-## 🗄 Database Design & Schema Relationships (MongoDB)
+## 🗄 Database Design (MongoDB Mongoose Schemas)
+
+┌──────────────┐             ┌──────────────┐
+│     User     │◄────────────┤    Group     │
+│--------------│ admin (ref) │--------------│
+│ _id          │             │ _id          │
+│ name         │◄────────────┤ name         │
+│ email        │ members[]   │ code         │
+│ passwordHash │ (refs)      │ image        │
+│ preferences  │             └──────────────┘
+└──────┬───────┘                    ▲
+│                            │
+│ user (ref)                 │ Target group
+▼                            │
+┌──────────────┐                    │
+│    Swipe     ├────────────────────┘
+│--------------│
+│ _id          │
+│ user (ref)   │             ┌──────────────┐
+│ activity(ref)├────────────►│   Activity   │
+│ status       │             │--------------│
+└──────────────┘             │ _id          │
+│ title        │
+│ category     │
+│ image / url  │
+└──────────────┘
+
+1. **User:** Stores authentication details (`password` excluded via `select: false`), avatar filename, and category interests.
+2. **Group:** Manages groups with auto-generated unique codes, an `admin` user reference, and a `members` reference array.
+3. **Activity:** Pre-seeded activity options categorized by leisure type with local and remote image paths.
+4. **Swipe:** Join collection storing user decisions (`like`/`dislike`) linking `user` and `activity` IDs.
+
+---
+
+## 📋 API Endpoints Reference
+
+| Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :---: |
+| `POST` | `/api/auth/register` | Register new user account | Public |
+| `POST` | `/api/auth/login` | Login and issue JWT Bearer token | Public |
+| `GET` | `/api/auth/me` | Fetch active user profile from token | Bearer Token |
+| `PUT` | `/api/auth/profile` | Update profile information and avatar | Bearer Token |
+| `GET` | `/api/groups` | Get all groups current user belongs to | Bearer Token |
+| `POST` | `/api/groups` | Create group and upload thumbnail | Bearer Token |
+| `POST` | `/api/groups/join` | Join group via invite code | Bearer Token |
+| `DELETE`| `/api/groups/:groupId/members/:memberId` | Remove member from group (Admin only) | Bearer Token (Admin) |
+| `GET` | `/api/groups/:groupId/matches` | Fetch retroactive and live matches (>= 2 likes) | Bearer Token |
+| `GET` | `/api/activities` | Fetch unswiped activities (`$nin` filter) | Bearer Token |
+| `POST` | `/api/activities` | Create activity card (Joi validation) | Bearer Token |
+| `GET` | `/api/swipes` | Retrieve logged user swipe history | Bearer Token |
+| `POST` | `/api/swipes` | Submit swipe and trigger group match logic | Bearer Token |
+| `GET` | `/api/health` | Diagnostic server health check | Public |
+
+---
+
+## ⚙️ Environment Variables
+
+### Backend (`backend/.env`)
+```env
+PORT=5000
+NODE_ENV=development
+MONGO_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/tfriends?retryWrites=true&w=majority
+JWT_SECRET=your_secret_jwt_key
+CLIENT_URL=http://localhost:5173
+
+
+💻 Local Setup Instructions
+
+# 1. Clone repository
+git clone [https://github.com/orbenyamini1/tfriends.git](https://github.com/orbenyamini1/tfriends.git)
+cd tfriends
+
+# 2. Run Backend
+cd backend
+npm install
+npm run dev
+
+# 3. Run Frontend (in a separate terminal)
+cd ../frontend
+npm install
+npm run dev
