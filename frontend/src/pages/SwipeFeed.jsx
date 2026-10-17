@@ -42,21 +42,29 @@ const SwipeFeed = () => {
   const { user, updateUserContext, logoutContext } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  const UPLOADS_URL = 'http://localhost:5000/uploads/';
+const UPLOADS_URL = import.meta.env.VITE_API_URL 
+  ? `${import.meta.env.VITE_API_URL}/uploads/` 
+  : 'https://tfriends-backend.onrender.com/uploads/';
 
   useEffect(() => {
+    // שליפת קבוצות
     dispatch(fetchUserGroups());
 
     const fetchActivities = async () => {
       try {
-        const { data } = await API.get('/activities');
-        setActivities(data);
+        const res = await API.get('/activities');
+        const list = Array.isArray(res.data) 
+          ? res.data 
+          : (res.data.activities || res.data.data || []);
+          
+        setActivities(list);
       } catch (err) {
         console.error('Error fetching activities:', err);
       } finally {
         setLoadingActivities(false);
       }
     };
+
     fetchActivities();
   }, [dispatch]);
 
