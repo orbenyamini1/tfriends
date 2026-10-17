@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { AuthContext } from '../context/AuthContext';
@@ -28,6 +28,9 @@ const SwipeFeed = () => {
   const [groupCodeInput, setGroupCodeInput] = useState('');
   const [activeTab, setActiveTab] = useState('matches'); 
 
+  // סטייט ייעודי לשמירת ההתאמות המסונכרנות מהשרת
+  const [serverMatches, setServerMatches] = useState([]);
+
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
@@ -36,7 +39,7 @@ const SwipeFeed = () => {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
   const dispatch = useDispatch();
-  const { list: groups = [], activeGroup, matches = [], history = [] } = useSelector((state) => state.group || {});
+  const { list: groups = [], activeGroup, history = [] } = useSelector((state) => state.group || {});
   const { user, updateUserContext, logoutContext } = useContext(AuthContext);
   const navigate = useNavigate();
 
@@ -44,6 +47,20 @@ const SwipeFeed = () => {
     ? (import.meta.env.VITE_API_URL + '/uploads/') 
     : 'https://tfriends-backend.onrender.com/uploads/';
 
+  // 1. פונקציה לשליפת ההתאמות מהשרת עבור הקבוצה הפעילה
+  const fetchGroupMatches = useCallback(async (groupId) => {
+    if (!groupId) return;
+    try {
+      const res = await API.get(`/groups/${groupId}/matches`);
+      if (res.data && res.data.matches) {
+        setServerMatches(res.data.matches);
+      }
+    } catch (err) {
+      console.error('Error fetching group matches:', err);
+    }
+  }, []);
+
+  // 2. טעינת נתונים ראשונית (קבוצות, פעילויות, היסטוריה)
   useEffect(() => {
     dispatch(fetchUserGroups());
 
@@ -82,9 +99,26 @@ const SwipeFeed = () => {
     fetchSwipeHistory();
   }, [dispatch]);
 
+  // 3. הגדרת קבוצה פעילה כברירת מחדל בעת טעינת הרשימה
+  useEffect(() => {
+    if (groups.length > 0 && !activeGroup) {
+      dispatch(setActiveGroup(groups[0]));
+    }
+  }, [groups, activeGroup, dispatch]);
+
+  // 4. שליפת ההתאמות בכל פעם שהקבוצה הפעילה משתנה או כשעוברים לטאב התאמות
+  useEffect(() => {
+    if (activeGroup?._id) {
+      fetchGroupMatches(activeGroup._id);
+    }
+  }, [activeGroup, activeTab, fetchGroupMatches]);
+
   const handleSelectGroup = (groupId) => {
     const selected = groups.find(g => g._id === groupId);
-    dispatch(setActiveGroup(selected || groupId));
+    if (selected) {
+      dispatch(setActiveGroup(selected));
+      fetchGroupMatches(selected._id);
+    }
   };
 
   const handleImageChange = (e) => {
@@ -176,7 +210,7 @@ const SwipeFeed = () => {
     const currentActivity = activities[currentIndex];
     if (!currentActivity) return;
     
-    // הוספה מיידית להיסטוריה המקומית ב-Redux
+    // הוספה מיידית להיסטוריה המקומית
     dispatch(addToHistory({
       id: currentActivity._id,
       title: currentActivity.title,
@@ -185,24 +219,15 @@ const SwipeFeed = () => {
     }));
 
     try {
-      // שליחת הסווייפ יחד עם מזהה הקבוצה הפעילה
       const { data } = await API.post('/swipes', {
         activityId: currentActivity._id,
         status: status,
         groupId: activeGroup?._id
       });
 
-      // בדיקה אם הוחזר Match מהשרת
-      if (data.match && activeGroup) {
-        const matchedNames = data.matchedUsers?.length > 0 
-          ? ` (התאמה עם: ${data.matchedUsers.join(', ')})` 
-          : '';
-
-        dispatch(addMatch({
-          id: Date.now(),
-          activityTitle: currentActivity.title,
-          message: `יש התאמה בקבוצה "${activeGroup.name}" על ${currentActivity.title}! 🎉${matchedNames}`
-        }));
+      // אם נוצר Match, רענן מיד את רשימת ההתאמות מהשרת
+      if (data.match && activeGroup?._id) {
+        fetchGroupMatches(activeGroup._id);
       }
 
       setCurrentIndex((prevIndex) => prevIndex + 1);
@@ -380,7 +405,7 @@ const SwipeFeed = () => {
             onClick={() => setActiveTab('matches')}
             style={{ flex: 1, padding: '8px', background: 'none', border: 'none', borderBottom: activeTab === 'matches' ? '3px solid #2563eb' : 'none', fontWeight: activeTab === 'matches' ? 'bold' : 'normal', cursor: 'pointer', color: activeTab === 'matches' ? '#2563eb' : '#64748b' }}
           >
-            התאמות ({matches.length})
+            התאמות ({serverMatches.length})
           </button>
           <button 
             onClick={() => setActiveTab('history')}
@@ -392,10 +417,10 @@ const SwipeFeed = () => {
 
         <div style={{ flex: 1 }}>
           {activeTab === 'matches' ? (
-            matches.length === 0 ? (
+            serverMatches.length === 0 ? (
               <p style={{ color: '#94a3b8', textAlign: 'center', fontSize: '13px', marginTop: '15px' }}>אין עדיין התאמות בקבוצה...</p>
             ) : (
-              matches.map((match) => (
+              serverMatches.map((match) => (
                 <div key={match.id} style={{ background: '#eff6ff', borderRight: '4px solid #2563eb', padding: '10px', borderRadius: '6px', marginBottom: '10px' }}>
                   <strong style={{ color: '#1e40af', display: 'block', fontSize: '13px' }}>🎯 בינגו משותף!</strong>
                   <span style={{ fontSize: '12px', color: '#334155' }}>{match.message}</span>
