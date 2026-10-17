@@ -9,7 +9,7 @@ const ActivityCard = React.memo(({ activity, onSwipe }) => {
 
   const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80';
 
-  const rawImage = activity?.imageUrl || activity?.image;
+  const rawImage = activity.imageUrl || activity.image;
 
   const imageSrc = rawImage?.startsWith('http')
     ? rawImage
@@ -24,19 +24,20 @@ const ActivityCard = React.memo(({ activity, onSwipe }) => {
       boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
       border: '1px solid #e2e8f0',
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      userSelect: 'none'
     }}>
       <div style={{ position: 'relative', width: '100%', height: '240px', background: '#e2e8f0' }}>
         <img 
           src={imageSrc} 
-          alt={activity.title}
+          alt={activity.title || 'פעילות'}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           onError={(e) => {
             e.target.onerror = null;
             e.target.src = DEFAULT_IMAGE;
           }}
         />
-        <span style={{
+        <div style={{
           position: 'absolute',
           top: '12px',
           right: '12px',
@@ -45,53 +46,56 @@ const ActivityCard = React.memo(({ activity, onSwipe }) => {
           padding: '4px 10px',
           borderRadius: '20px',
           fontSize: '12px',
-          fontWeight: 'bold'
+          fontWeight: 'bold',
+          backdropFilter: 'blur(4px)'
         }}>
-          {activity.category}
-        </span>
+          🏷️ {activity.category || 'כללי'}
+        </div>
       </div>
 
-      <div style={{ padding: '16px' }}>
-        <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#0f172a' }}>{activity.title}</h3>
-        <p style={{ margin: '0 0 8px 0', color: '#64748b', fontSize: '13px' }}>📍 {activity.location}</p>
-        <p style={{ margin: '0 0 16px 0', color: '#334155', fontSize: '14px', lineHeight: '1.4' }}>{activity.description}</p>
+      <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div>
+          <h2 style={{ margin: '0 0 6px 0', fontSize: '20px', color: '#0f172a' }}>{activity.title}</h2>
+          <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#64748b' }}>📍 {activity.location || 'לא צוין מיקום'}</p>
+          <p style={{ margin: 0, fontSize: '14px', color: '#334155', lineHeight: '1.5' }}>
+            {activity.description || 'אין תיאור זמין לפעילות זו.'}
+          </p>
+        </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px' }}>
+        <div style={{ display: 'flex', gap: '14px', marginTop: '24px' }}>
           <button 
             onClick={() => onSwipe('dislike')}
             style={{
-              width: '50px',
-              height: '50px',
-              borderRadius: '50%',
+              flex: 1,
+              padding: '12px',
+              borderRadius: '10px',
               border: '2px solid #ef4444',
-              background: '#fee2e2',
+              background: '#ffffff',
               color: '#ef4444',
-              fontSize: '20px',
+              fontSize: '16px',
+              fontWeight: 'bold',
               cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              transition: 'all 0.2s'
             }}
           >
-            ✕
+            ❌ לא מתאים
           </button>
           <button 
             onClick={() => onSwipe('like')}
             style={{
-              width: '50px',
-              height: '50px',
-              borderRadius: '50%',
-              border: '2px solid #22c55e',
-              background: '#dcfce7',
-              color: '#22c55e',
-              fontSize: '20px',
+              flex: 1,
+              padding: '12px',
+              borderRadius: '10px',
+              border: 'none',
+              background: '#10b981',
+              color: '#ffffff',
+              fontSize: '16px',
+              fontWeight: 'bold',
               cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              transition: 'all 0.2s'
             }}
           >
-            💚
+            💚 זורם לגמרי
           </button>
         </div>
       </div>

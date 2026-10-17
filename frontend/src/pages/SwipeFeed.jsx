@@ -10,6 +10,7 @@ import {
   setActiveGroup, 
   addMatch, 
   addToHistory, 
+  setHistory,
   clearGroupState 
 } from '../store/groupSlice';
 import API from '../services/api';
@@ -20,16 +21,13 @@ const SwipeFeed = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loadingActivities, setLoadingActivities] = useState(true);
   
-  // ניהול טופס יצירת קבוצה + Preview
   const [groupNameInput, setGroupNameInput] = useState('');
   const [groupImageInput, setGroupImageInput] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
 
-  // ניהול הצטרפות וטאבים
   const [groupCodeInput, setGroupCodeInput] = useState('');
   const [activeTab, setActiveTab] = useState('matches'); 
 
-  // ניהול מודל עריכת פרופיל משתמש
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
@@ -42,12 +40,11 @@ const SwipeFeed = () => {
   const { user, updateUserContext, logoutContext } = useContext(AuthContext);
   const navigate = useNavigate();
 
-const UPLOADS_URL = import.meta.env.VITE_API_URL 
-  ? `${import.meta.env.VITE_API_URL}/uploads/` 
-  : 'https://tfriends-backend.onrender.com/uploads/';
+  const UPLOADS_URL = import.meta.env.VITE_API_URL 
+    ? (import.meta.env.VITE_API_URL + '/uploads/') 
+    : 'https://tfriends-backend.onrender.com/uploads/';
 
   useEffect(() => {
-    // שליפת קבוצות
     dispatch(fetchUserGroups());
 
     const fetchActivities = async () => {
@@ -56,7 +53,6 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
         const list = Array.isArray(res.data) 
           ? res.data 
           : (res.data.activities || res.data.data || []);
-          
         setActivities(list);
       } catch (err) {
         console.error('Error fetching activities:', err);
@@ -65,7 +61,25 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
       }
     };
 
+    const fetchSwipeHistory = async () => {
+      try {
+        const { data } = await API.get('/swipes');
+        if (Array.isArray(data)) {
+          const loadedHistory = data.map(item => ({
+            id: item.activity?._id || item._id,
+            title: item.activity?.title || 'פעילות שנמחקה',
+            status: item.status === 'like' ? '💚 לייק' : '❌ דיסלייק',
+            time: new Date(item.createdAt || Date.now()).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+          }));
+          dispatch(setHistory(loadedHistory));
+        }
+      } catch (err) {
+        console.error('Error fetching swipe history:', err);
+      }
+    };
+
     fetchActivities();
+    fetchSwipeHistory();
   }, [dispatch]);
 
   const handleSelectGroup = (groupId) => {
@@ -126,7 +140,6 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
     }
   };
 
-  // פתיחת מודל עריכת פרופיל
   const openProfileModal = () => {
     setEditName(user?.name || '');
     setEditPassword('');
@@ -135,7 +148,6 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
     setIsProfileModalOpen(true);
   };
 
-  // שמירת השינויים בפרופיל
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     setIsUpdatingProfile(true);
@@ -150,7 +162,6 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      // עדכון ה-Context ו-localStorage מיידית
       updateUserContext(data);
       setIsProfileModalOpen(false);
       alert('הפרופיל עודכן בהצלחה! ✨');
@@ -205,7 +216,7 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Arial, sans-serif', direction: 'rtl', background: '#f8fafc', position: 'relative' }}>
       
-      {/* 1. חלון צדדי - ניהול קבוצות והתאמות */}
+      {/* 1. סרגל צד - ניהול קבוצות, היסטוריה והתאמות */}
       <div style={{ width: '360px', background: '#ffffff', borderLeft: '1px solid #e2e8f0', padding: '20px', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
         
         {/* בחירת קבוצה פעילה */}
@@ -280,7 +291,7 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
           )}
         </div>
 
-        {/* יצירת קבוצה עם Preview */}
+        {/* פתיחת קבוצה חדשה */}
         <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
           <h4 style={{ margin: '0 0 10px 0', color: '#1e293b' }}>🔨 פתח קבוצה חדשה</h4>
           <form onSubmit={handleCreateGroup} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -347,7 +358,7 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
           </form>
         </div>
 
-        {/* טאבים */}
+        {/* טאבים: התאמות והיסטוריה */}
         <div style={{ display: 'flex', borderBottom: '2px solid #e2e8f0', marginBottom: '12px' }}>
           <button 
             onClick={() => setActiveTab('matches')}
@@ -381,7 +392,11 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
             ) : (
               history.map((item, index) => (
                 <div key={index} style={{ background: '#ffffff', borderRight: `4px solid ${item.status.includes('לייק') ? '#16a34a' : '#dc2626'}`, padding: '8px', borderRadius: '6px', marginBottom: '8px', border: '1px solid #f1f5f9' }}>
-                  <strong style={{ fontSize: '12px' }}>{item.title}</strong> - <span style={{ fontSize: '11px', color: '#64748b' }}>{item.status}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '12px', color: '#1e293b' }}>{item.title}</strong>
+                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>{item.time}</span>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>{item.status}</span>
                 </div>
               ))
             )
@@ -392,11 +407,9 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
       {/* 2. אזור הכרטיסיות המרכזי */}
       <div style={{ flex: 1, padding: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         
-        {/* Header מרכזי עם תמונת הפרופיל של המשתמש וכפתור עריכת פרטים */}
+        {/* Header מרכזי עם פרטי המשתמש */}
         <div style={{ width: '100%', maxWidth: '520px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', background: '#ffffff', padding: '12px 18px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            
-            {/* תמונת הפרופיל של המשתמש */}
             {user?.profileImage && user.profileImage !== 'default-avatar.png' ? (
               <img
                 src={`${UPLOADS_URL}${user.profileImage}`}
@@ -461,7 +474,7 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
         )}
       </div>
 
-      {/* 3. מודל עריכת פרופיל ותמונה אישית */}
+      {/* 3. מודל עריכת פרופיל אישי */}
       {isProfileModalOpen && (
         <div style={{
           position: 'fixed',
@@ -495,8 +508,6 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
             </div>
 
             <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              
-              {/* העלאת תמונת פרופיל + תצוגה מקדימה */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <img 
                   src={
@@ -565,7 +576,6 @@ const UPLOADS_URL = import.meta.env.VITE_API_URL
                   ביטול
                 </button>
               </div>
-
             </form>
           </div>
         </div>
