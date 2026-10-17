@@ -21,4 +21,7 @@ router.delete('/:groupId', groupController.deleteGroup);
 // הסרת חבר מסוים מהקבוצה (DELETE)
 router.delete('/:groupId/members/:memberId', groupController.removeMember);
 
+// הנתיב שהיה חסר ופתר את שגיאת ה-404:
+router.get('/:groupId/matches', groupController.getGroupMatches);
+
 module.exports = router;
