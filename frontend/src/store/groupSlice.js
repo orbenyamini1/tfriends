@@ -11,7 +11,7 @@ export const fetchUserGroups = createAsyncThunk('groups/fetchUserGroups', async 
   }
 });
 
-// יצירת קבוצה חדשה (עם FormData והעלאת תמונה)
+// יצירת קבוצה חדשה
 export const createGroupThunk = createAsyncThunk('groups/createGroup', async (formData, { rejectWithValue }) => {
   try {
     const { data } = await API.post('/groups', formData, {
@@ -33,7 +33,7 @@ export const joinGroupThunk = createAsyncThunk('groups/joinGroup', async (code, 
   }
 });
 
-// הסרת חבר מהקבוצה (מנהל בלבד)
+// הסרת חבר מהקבוצה
 export const removeMemberThunk = createAsyncThunk('groups/removeMember', async ({ groupId, memberId }, { rejectWithValue }) => {
   try {
     const { data } = await API.delete(`/groups/${groupId}/members/${memberId}`);
@@ -56,7 +56,6 @@ const groupSlice = createSlice({
   name: 'group',
   initialState,
   reducers: {
-    // עדכון הקבוצה הפעילה (מקבל קוד, ID או אובייקט קבוצה)
     setActiveGroup: (state, action) => {
       if (typeof action.payload === 'object' && action.payload !== null) {
         state.activeGroup = action.payload;
@@ -69,7 +68,10 @@ const groupSlice = createSlice({
       state.matches.push(action.payload);
     },
     addToHistory: (state, action) => {
-      state.history.push(action.payload);
+      state.history.unshift(action.payload);
+    },
+    setHistory: (state, action) => {
+      state.history = action.payload;
     },
     clearGroupState: (state) => {
       state.list = [];
@@ -113,7 +115,8 @@ export const {
   setActiveGroup, 
   addMatch, 
   addToHistory, 
-  clearGroupState
+  setHistory, 
+  clearGroupState 
 } = groupSlice.actions;
 
 export default groupSlice.reducer;
