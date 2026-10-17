@@ -1,69 +1,89 @@
 const Swipe = require('../models/Swipe');
-const User = require('../models/User');
-const Activity = require('../models/Activity');
+const Group = require('../models/Group');
 
-/**
- * @desc    Record a swipe (like/dislike), save category preference, and check for mutual match
- * @route   POST /api/swipes
- * @access  Private
- */
+// רישום סווייפ ובדיקת התאמה (Match) קבוצתית
 const handleSwipe = async (req, res, next) => {
   try {
-    const activityId = req.body.activityId || req.body.activity;
-    const status = req.body.status || req.body.direction;
-    const userId = req.user ? (req.user._id || req.user.id) : req.body.userId;
+    const userId = req.user._id || req.user.id;
+    const { activityId, status, groupId } = req.body;
 
     if (!activityId || !status) {
-      return res.status(400).json({ message: 'נא לספק activityId ו-status' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'activityId and status are required' 
+      });
     }
 
-    // 1. שמירת ההחלקה בדאטה-בייס
-    const swipe = await Swipe.create({
-      user: userId,
-      activity: activityId,
-      status
-    });
+    // 1. שמירה או עדכון של הסווייפ ב-MongoDB
+    let swipe = await Swipe.findOne({ user: userId, activity: activityId });
+    if (swipe) {
+      swipe.status = status;
+      await swipe.save();
+    } else {
+      swipe = await Swipe.create({
+        user: userId,
+        activity: activityId,
+        status: status
+      });
+    }
 
-    // 2. שמירת העדפת הקטגוריה אם המשתמש עשה לייק
+    let isMatch = false;
+    let matchedUsers = [];
+
+    // 2. בדיקת התאמה: אם נשלח לייק ויש קבוצה פעילה
     if (status === 'like') {
-      const activity = await Activity.findById(activityId);
-      if (activity && activity.category) {
-        await User.findByIdAndUpdate(userId, {
-          $addToSet: { 'preferences.categories': activity.category }
-        });
+      let targetGroup = null;
+
+      if (groupId) {
+        targetGroup = await Group.findById(groupId);
+      } else {
+        targetGroup = await Group.findOne({ members: userId });
       }
 
-      // 3. בדיקת Match מול חברים / קבוצה
-      const currentUser = await User.findById(userId);
-      const friendIds = currentUser?.friends || [];
-
-      if (friendIds.length > 0) {
-        const mutualSwipe = await Swipe.findOne({
-          user: { $in: friendIds },
+      if (targetGroup) {
+        // שליפת כל הלייקים של חברי הקבוצה עבור אותה פעילות
+        const groupLikes = await Swipe.find({
           activity: activityId,
-          status: 'like'
+          status: 'like',
+          user: { $in: targetGroup.members }
         }).populate('user', 'name email');
 
-        if (mutualSwipe) {
-          return res.status(201).json({
-            swipe,
-            match: true,
-            matchedWith: mutualSwipe.user,
-            message: `יש התאמה! אתה ו-${mutualSwipe.user.name} אהבתם את ${activity ? activity.title : 'הפעילות'}!`
-          });
+        // אם לפחות 2 חברים שונים בקבוצה אהבו את הפעילות - מוכרזת התאמה!
+        if (groupLikes.length >= 2) {
+          isMatch = true;
+          matchedUsers = groupLikes.map(gl => gl.user?.name || 'משתמש');
         }
       }
     }
 
-    res.status(201).json({ swipe, match: false });
+    res.status(200).json({
+      success: true,
+      swipe,
+      match: isMatch,
+      matchedUsers,
+      message: isMatch ? 'יש התאמה בקבוצה! 🎉' : 'הסווייפ נקלט בהצלחה'
+    });
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(200).json({ message: 'פעילות זו כבר סומנה בעבר', match: false });
-    }
+    next(error);
+  }
+};
+
+// שליפת היסטוריית הסווייפים המלאה של המשתמש מ-MongoDB
+const getUserSwipes = async (req, res, next) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const swipes = await Swipe.find({ user: userId })
+      .populate('activity', 'title category image imageUrl')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(swipes);
+  } catch (error) {
     next(error);
   }
 };
 
 module.exports = {
-  handleSwipe
+  handleSwipe,
+  getUserSwipes
 };

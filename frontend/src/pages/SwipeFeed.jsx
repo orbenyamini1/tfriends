@@ -176,6 +176,7 @@ const SwipeFeed = () => {
     const currentActivity = activities[currentIndex];
     if (!currentActivity) return;
     
+    // הוספה מיידית להיסטוריה המקומית ב-Redux
     dispatch(addToHistory({
       id: currentActivity._id,
       title: currentActivity.title,
@@ -184,16 +185,23 @@ const SwipeFeed = () => {
     }));
 
     try {
+      // שליחת הסווייפ יחד עם מזהה הקבוצה הפעילה
       const { data } = await API.post('/swipes', {
         activityId: currentActivity._id,
-        status: status
+        status: status,
+        groupId: activeGroup?._id
       });
 
+      // בדיקה אם הוחזר Match מהשרת
       if (data.match && activeGroup) {
+        const matchedNames = data.matchedUsers?.length > 0 
+          ? ` (התאמה עם: ${data.matchedUsers.join(', ')})` 
+          : '';
+
         dispatch(addMatch({
           id: Date.now(),
           activityTitle: currentActivity.title,
-          message: `יש התאמה בקבוצה "${activeGroup.name}" על ${currentActivity.title}! 🎉`
+          message: `יש התאמה בקבוצה "${activeGroup.name}" על ${currentActivity.title}! 🎉${matchedNames}`
         }));
       }
 
@@ -211,7 +219,15 @@ const SwipeFeed = () => {
 
   const isAdmin = activeGroup && (activeGroup.admin?._id === user?._id || activeGroup.admin === user?._id);
 
-  if (loadingActivities) return <h2 style={{ textAlign: 'center', marginTop: '50px' }}>טוען פעילויות...</h2>;
+  if (loadingActivities) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'Arial, sans-serif', direction: 'rtl', color: '#2563eb' }}>
+        <div style={{ fontSize: '40px', marginBottom: '15px' }}>⏳</div>
+        <h2 style={{ margin: 0, fontSize: '20px', color: '#1e293b' }}>טוען פעילויות מ-MongoDB...</h2>
+        <p style={{ color: '#64748b', fontSize: '14px', marginTop: '6px' }}>רק רגע אחד</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Arial, sans-serif', direction: 'rtl', background: '#f8fafc', position: 'relative' }}>

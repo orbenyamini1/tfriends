@@ -1,107 +1,100 @@
+require('dotenv').config();
 const express = require('express');
-const dotenv = require('dotenv');
 const cors = require('cors');
 const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const connectDB = require('./config/db');
+const mongoose = require('mongoose');
 
-// ייבוא נתיבי ה-API
+// ייבוא ראוטרים
 const authRoutes = require('./routes/authRoutes');
-const swipeRoutes = require('./routes/swipeRoutes');
-const activityRoutes = require('./routes/activityRoutes');
 const groupRoutes = require('./routes/groupRoutes');
-
-// טעינת הגדרות ה-env
-dotenv.config();
-
-// חיבור למסד הנתונים
-connectDB();
+const activityRoutes = require('./routes/activityRoutes');
+const swipeRoutes = require('./routes/swipeRoutes');
 
 const app = express();
 
-// 1. אבטחת כותרות HTTP באמצעות Helmet
-// הגדרת crossOriginResourcePolicy מאפשרת ל-React לטעון את התמונות מתיקיית uploads ללא חסימת CORS בדפדפן
-app.use(helmet({
-  crossOriginResourcePolicy: false,
-}));
+// 1. אבטחה בסיסית עם Helmet (מותאם ל-Vite ללא חסימת eval וללא שגיאות CSP)
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+  })
+);
 
-// 2. הגבלת קצב בקשות (Rate Limiting) למניעת התקפות Brute-Force ו-DoS
+// 2. שכבת Rate Limiting כללית לכל ה-API (דרישת סילבוס למניעת DoS)
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // חלון זמן של 15 דקות
-  max: 150, // מקסימום 150 בקשות ל-IP
+  windowMs: 15 * 60 * 1000,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { status: 'error', message: 'יותר מדי בקשות מכתובת זו, נסה שוב בעוד 15 דקות' }
+  message: {
+    success: false,
+    message: 'יותר מדי בקשות נשלחו מהתקן זה, אנא נסה שוב מאוחר יותר.'
+  }
 });
+app.use('/api', apiLimiter);
 
+// 3. שכבת Rate Limiting מוגברת ל-Auth (מניעת Brute-Force על סיסמאות)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20, // הגבלה מחמירה יותר על התחברות והרשמה
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { status: 'error', message: 'יותר מדי ניסיונות כניסה/הרשמה, נסה שוב בעוד 15 דקות' }
+  message: {
+    success: false,
+    message: 'יותר מדי ניסיונות התחברות/הרשמה. אנא נסה שוב בעוד 15 דקות.'
+  }
 });
-
-// הגדרת CORS
-const allowedOrigins = [
-  'http://localhost:5173',
-  'https://tfriends.vercel.app'
-];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    // מאפשר בקשות ללא origin (כמו Postman) או מהדומיינים המורשים
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Blocked by CORS'));
-    }
-  },
-  credentials: true
-}));
-// Middlewares לפענוח גוף הבקשה
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// הפיכת תיקיית uploads לציבורית לצורך הצגת תמונות ב-React
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// החלת ה-Rate Limiters על הנתיבים
-app.use('/api', apiLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
-// חיבור נתיבי ה-API לשרת
-app.use('/api/auth', authRoutes);
-app.use('/api/swipes', swipeRoutes);
-app.use('/api/activities', activityRoutes);
-app.use('/api/groups', groupRoutes);
+// 4. CORS ופענוח JSON
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// נתיב בדיקה ראשוני
-app.get('/', (req, res) => {
-  res.send('tfriends API is running successfully with Full Stack requirements completed!');
+// 5. שירות קבצים סטטיים שהועלו דרך Multer
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// 6. נתיבי ה-API
+app.use('/api/auth', authRoutes);
+app.use('/api/groups', groupRoutes);
+app.use('/api/activities', activityRoutes);
+app.use('/api/swipes', swipeRoutes);
+
+// 7. נתיב בדיקת בריאות שרת
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'OK', message: 'tfriends backend is active' });
 });
 
-const PORT = process.env.PORT || 5000;
-
-// מנגנון גלובלי לטיפול בשגיאות
+// 8. Global Error Handler מרכזי
 app.use((err, req, res, next) => {
-  console.error('❌ Global Error Caught:', err.message);
-
-  if (err.isJoi) {
-    return res.status(400).json({
-      status: 'error',
-      message: err.details[0].message
-    });
-  }
-
-  res.status(err.status || 500).json({
-    status: 'error',
-    message: err.message || 'Internal Server Error'
+  console.error('SERVER ERROR:', err.message);
+  const statusCode = err.statusCode || 500;
+  res.status(statusCode).json({
+    success: false,
+    message: err.message || 'שגיאת שרת פנימית',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🎯 Server is running on port ${PORT}`);
-});
+// 9. התחברות ל-MongoDB והרצת השרת
+const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/tfriends';
+
+mongoose.connect(MONGO_URI)
+  .then(() => {
+    console.log('MongoDB connected successfully');
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('MongoDB connection failure:', err.message);
+  });
+
+module.exports = app;
