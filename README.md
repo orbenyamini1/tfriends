@@ -32,30 +32,8 @@
 
 ## 🗄 Database Design (MongoDB Mongoose Schemas)
 
-┌──────────────┐             ┌──────────────┐
-│     User     │◄────────────┤    Group     │
-│--------------│ admin (ref) │--------------│
-│ _id          │             │ _id          │
-│ name         │◄────────────┤ name         │
-│ email        │ members[]   │ code         │
-│ passwordHash │ (refs)      │ image        │
-│ preferences  │             └──────────────┘
-└──────┬───────┘                    ▲
-│                            │
-│ user (ref)                 │ Target group
-▼                            │
-┌──────────────┐                    │
-│    Swipe     ├────────────────────┘
-│--------------│
-│ _id          │
-│ user (ref)   │             ┌──────────────┐
-│ activity(ref)├────────────►│   Activity   │
-│ status       │             │--------------│
-└──────────────┘             │ _id          │
-│ title        │
-│ category     │
-│ image / url  │
-└──────────────┘
+<img width="2000" height="1152" alt="image" src="https://github.com/user-attachments/assets/d006a4c1-911b-46b3-a091-18469fa8f913" />
+
 
 1. **User:** Stores authentication details (`password` excluded via `select: false`), avatar filename, and category interests.
 2. **Group:** Manages groups with auto-generated unique codes, an `admin` user reference, and a `members` reference array.
