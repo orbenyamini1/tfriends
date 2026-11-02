@@ -6,7 +6,6 @@
 
 ## 🌐 Live Deployments & Repository
 - **Frontend (Vercel):** https://tfriends.vercel.app
-- **Backend API (Render):** https://tfriends-backend.onrender.com
 - **GitHub Monorepo:** https://github.com/orbenyamini1/tfriends
 
 ---
